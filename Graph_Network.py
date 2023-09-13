@@ -11,7 +11,8 @@
 
 # Press stop: stops graphing network
 # Press reset: reset the graph to start again
-# Press save: To Excel sheet ***error error error lol :) *** Needs more attention. Not sure how to fix atm.
+# Press save: To Excel sheet ***error error error (All arrays must be of the same length) lol :) *** Needs more attention. Not sure how to fix atm.
+
 
 
 import logging
@@ -24,6 +25,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from ping3 import ping
+from threading import Lock
 
 # Tkinter setup
 root = tk.Tk()
@@ -38,6 +40,8 @@ down_times = []
 down_timestamps = []
 filtered_response_times = []
 filtered_timestamps = []
+# Mutex Lock Initialization
+data_lock = Lock()
 
 monitoring = [False]
 
@@ -54,21 +58,22 @@ def toggle(event):
 def ping_thread():
     while True:
         if monitoring[0]:
-            response_time = ping(target_host)
-            is_up = 1 if response_time is not None else 0
-            current_time = time.time()
-            formatted_time = datetime.fromtimestamp(current_time).strftime('%H:%M:%S')
+            with data_lock: # Acquire the lock while updating global lists
+                response_time = ping(target_host)
+                is_up = 1 if response_time is not None else 0
+                current_time = time.time()
+                formatted_time = datetime.fromtimestamp(current_time).strftime('%H:%M:%S')
 
-            timestamps.append(formatted_time)
-            uptimes.append(is_up)
-            response_times.append(response_time if response_time else 0)
+                timestamps.append(formatted_time)
+                uptimes.append(is_up)
+                response_times.append(response_time if response_time else 0)
 
-            if is_up == 0:
-                down_times.append(0)
-                down_timestamps.append(formatted_time)
+                if is_up == 0:
+                    down_times.append(0)
+                    down_timestamps.append(formatted_time)
 
-            logging.info(f"{formatted_time}, {is_up}, {response_time}")
-            time.sleep(10)
+                logging.info(f"{formatted_time}, {is_up}, {response_time}")
+                time.sleep(10)
         else:
             time.sleep(1)
 
@@ -103,6 +108,16 @@ plt.grid(True)
 
 # Save the data to Excel format
 def save_to_excel(event):
+    with data_lock:  # Acquire the lock
+        local_timestamps = timestamps.copy()
+        local_uptimes = uptimes.copy()
+        local_response_times = response_times.copy()
+        local_down_timestamps = down_timestamps.copy()
+        local_down_times = down_times.copy()
+        local_filtered_response_times = filtered_response_times.copy()
+        local_filtered_timestamps = filtered_timestamps.copy()
+    # We've released the lock; now proceed to save
+
     df = pd.DataFrame({
         'Timestamp': timestamps,
         'Uptime': uptimes,
@@ -168,3 +183,4 @@ while True:
 
     plt.grid(True)
     plt.pause(1)
+
